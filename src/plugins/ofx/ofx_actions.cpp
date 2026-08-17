@@ -87,6 +87,32 @@ void define_double_param(OfxParamSetHandle param_set, const char* name, const ch
     set_parent(param_props, parent);
 }
 
+void define_rgb_param(OfxParamSetHandle param_set, const char* name, const char* label,
+                      const std::array<double, 3>& default_value, const char* hint,
+                      const char* parent = nullptr) {
+    OfxPropertySetHandle param_props = nullptr;
+    const OfxStatus status =
+        g_suites.parameter->paramDefine(param_set, kOfxParamTypeRGB, name, &param_props);
+    if (status != kOfxStatOK) {
+        log_param_define_failure("define_rgb_param", name, kOfxParamTypeRGB, status);
+        return;
+    }
+
+    g_suites.property->propSetString(param_props, kOfxPropLabel, 0, label);
+    for (int channel = 0; channel < 3; ++channel) {
+        g_suites.property->propSetDouble(param_props, kOfxParamPropDefault, channel,
+                                         default_value[static_cast<std::size_t>(channel)]);
+        g_suites.property->propSetDouble(param_props, kOfxParamPropMin, channel, 0.0);
+        g_suites.property->propSetDouble(param_props, kOfxParamPropMax, channel, 1.0);
+        g_suites.property->propSetDouble(param_props, kOfxParamPropDisplayMin, channel, 0.0);
+        g_suites.property->propSetDouble(param_props, kOfxParamPropDisplayMax, channel, 1.0);
+    }
+    if (hint != nullptr) {
+        g_suites.property->propSetString(param_props, kOfxParamPropHint, 0, hint);
+    }
+    set_parent(param_props, parent);
+}
+
 void define_int_param(OfxParamSetHandle param_set, const char* name, const char* label,
                       int default_value, int min_value, int max_value, const char* hint,
                       const char* parent = nullptr, bool enabled = true) {
@@ -578,6 +604,21 @@ OfxStatus describe_in_context(OfxImageEffectHandle descriptor, const char* conte
     define_choice_param(param_set, kParamScreenColor, "Screen Color", screen_color_default,
                         screen_color_options, screen_color_hint, "setup_group",
                         /*enabled=*/true, /*secret=*/is_blue_descriptor);
+    const std::array<double, 3> key_color_default =
+        is_blue_descriptor ? std::array<double, 3>{0.0, 0.0, 1.0}
+                           : std::array<double, 3>{0.0, 1.0, 0.0};
+    define_rgb_param(param_set, kParamKeyColor, "Key Color", key_color_default,
+                     "sRGB screen shade used only for the rough fallback matte. This does not "
+                     "change the selected Green or Blue model.",
+                     "setup_group");
+    define_double_param(param_set, kParamKeyTolerance, "Key Tolerance", 0.08, 0.0, 1.0,
+                        "Normalized chromaticity distance that is fully transparent in the "
+                        "rough fallback matte.",
+                        "setup_group");
+    define_double_param(param_set, kParamKeySoftness, "Key Softness", 0.12, 0.0, 1.0,
+                        "Normalized transition width from transparent to foreground in the "
+                        "rough fallback matte.",
+                        "setup_group");
     define_choice_param(
         param_set, kParamQualityMode, "Quality", kQualityPreview,
         {quality_mode_ui_label(kQualityAuto), quality_mode_ui_label(kQualityPreview),

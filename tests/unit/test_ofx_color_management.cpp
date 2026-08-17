@@ -679,6 +679,16 @@ TEST_CASE("Blue descriptor describe_in_context locks screen_color to a single hi
     REQUIRE(screen_color_props.ints.at(kOfxParamPropSecret).front() == 1);
     REQUIRE(screen_color_props.strings.at(kOfxParamPropChoiceOption) ==
             std::vector<std::string>{"Blue"});
+
+    const auto& key_color_props = descriptor.param_set.params.at(kParamKeyColor)->props;
+    REQUIRE(key_color_props.doubles.at(kOfxParamPropDefault) ==
+            std::vector<double>{0.0, 0.0, 1.0});
+    REQUIRE(descriptor.param_set.params.at(kParamKeyTolerance)
+                ->props.doubles.at(kOfxParamPropDefault)
+                .front() == Catch::Approx(0.08));
+    REQUIRE(descriptor.param_set.params.at(kParamKeySoftness)
+                ->props.doubles.at(kOfxParamPropDefault)
+                .front() == Catch::Approx(0.12));
 }
 
 TEST_CASE("Green descriptor describe_in_context exposes Green and Blue-Green Channel Swap only",
@@ -700,6 +710,9 @@ TEST_CASE("Green descriptor describe_in_context exposes Green and Blue-Green Cha
     if (secret_it != screen_color_props.ints.end()) {
         REQUIRE(secret_it->second.front() == 0);
     }
+    const auto& key_color_props = descriptor.param_set.params.at(kParamKeyColor)->props;
+    REQUIRE(key_color_props.doubles.at(kOfxParamPropDefault) ==
+            std::vector<double>{0.0, 1.0, 0.0});
 }
 
 // in production logs. This regression test catches that class of bug at

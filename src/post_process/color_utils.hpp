@@ -46,10 +46,12 @@ class CORRIDORKEY_API ColorUtils {
     static void composite_premultiplied_over_checker_to_srgb(Image premultiplied_rgba, Image dst);
 
     /**
-     * @brief Generate a rough alpha guide using a simple green-key fallback.
-     * Used when no manual alpha hint is provided.
+     * @brief Generate a rough alpha guide from normalized RGB chromaticity distance.
+     * Used when no manual alpha hint is provided. The key color is interpreted as sRGB.
      */
-    static void generate_rough_matte(Image rgb, Image alpha_hint);
+    static void generate_rough_matte(Image rgb, Image alpha_hint,
+                                     const std::array<float, 3>& key_color = {0.0F, 1.0F, 0.0F},
+                                     float tolerance = 0.08F, float softness = 0.12F);
 
     /**
      * @brief Resize an image using bilinear interpolation.

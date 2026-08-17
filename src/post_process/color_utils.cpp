@@ -542,19 +542,50 @@ void ColorUtils::composite_premultiplied_over_checker_to_srgb(Image premultiplie
     });
 }
 
-void ColorUtils::generate_rough_matte(Image rgb, Image alpha_hint) {
+void ColorUtils::generate_rough_matte(Image rgb, Image alpha_hint,
+                                      const std::array<float, 3>& key_color, float tolerance,
+                                      float softness) {
     const int height = rgb.height;
     const int width = rgb.width;
+    constexpr float kNearBlackThreshold = 0.03F;
+    constexpr float kMaxChromaticityDistance = 1.41421356237F;
+    const float key_sum = key_color[0] + key_color[1] + key_color[2];
+    const float safe_key_sum = std::max(key_sum, kNearBlackThreshold);
+    const std::array<float, 3> key_chromaticity = {
+        key_color[0] / safe_key_sum,
+        key_color[1] / safe_key_sum,
+        key_color[2] / safe_key_sum,
+    };
+    const float clamped_tolerance = std::clamp(tolerance, 0.0F, 1.0F);
+    const float clamped_softness = std::clamp(softness, 0.0F, 1.0F);
 
     for (int y_pos = 0; y_pos < height; ++y_pos) {
         for (int x_pos = 0; x_pos < width; ++x_pos) {
             const float red = rgb(y_pos, x_pos, 0);
             const float green = rgb(y_pos, x_pos, 1);
             const float blue = rgb(y_pos, x_pos, 2);
+            const float sum = red + green + blue;
+            float matte = 1.0F;
+            if (sum >= kNearBlackThreshold) {
+                const float red_distance = (red / sum) - key_chromaticity[0];
+                const float green_distance = (green / sum) - key_chromaticity[1];
+                const float blue_distance = (blue / sum) - key_chromaticity[2];
+                const float distance =
+                    std::sqrt((red_distance * red_distance) +
+                              (green_distance * green_distance) +
+                              (blue_distance * blue_distance)) /
+                    kMaxChromaticityDistance;
 
-            // Simple green-detecting heuristic
-            const float green_bias = green - std::max(red, blue);
-            float matte = 1.0F - std::clamp(green_bias * 2.0F, 0.0F, 1.0F);
+                if (distance <= clamped_tolerance) {
+                    matte = 0.0F;
+                } else if (clamped_softness <= 0.0F ||
+                           distance >= clamped_tolerance + clamped_softness) {
+                    matte = 1.0F;
+                } else {
+                    const float normalized = (distance - clamped_tolerance) / clamped_softness;
+                    matte = normalized * normalized * (3.0F - (2.0F * normalized));
+                }
+            }
 
             alpha_hint(y_pos, x_pos, 0) = matte;
         }

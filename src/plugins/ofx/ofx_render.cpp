@@ -218,7 +218,9 @@ RuntimePathKind classify_runtime_path(const InstanceData* data, const InferenceP
 
 Result<GuideSourceKind> resolve_alpha_hint_source_impl(Image rgb_view, Image hint_view,
                                                        bool hint_from_clip,
-                                                       AlphaHintPolicy alpha_hint_policy) {
+                                                       AlphaHintPolicy alpha_hint_policy,
+                                                       const std::array<float, 3>& key_color,
+                                                       float key_tolerance, float key_softness) {
     if (hint_from_clip) {
         return GuideSourceKind::ExternalAlphaHint;
     }
@@ -230,7 +232,7 @@ Result<GuideSourceKind> resolve_alpha_hint_source_impl(Image rgb_view, Image hin
         }};
     }
 
-    ColorUtils::generate_rough_matte(rgb_view, hint_view);
+    ColorUtils::generate_rough_matte(rgb_view, hint_view, key_color, key_tolerance, key_softness);
     return GuideSourceKind::RoughFallback;
 }
 
@@ -615,8 +617,11 @@ void record_frame_timing(InstanceData* data, double elapsed_ms, LastRenderWorkOr
 
 Result<GuideSourceKind> resolve_alpha_hint_source(Image rgb_view, Image hint_view,
                                                   bool hint_from_clip,
-                                                  AlphaHintPolicy alpha_hint_policy) {
-    return resolve_alpha_hint_source_impl(rgb_view, hint_view, hint_from_clip, alpha_hint_policy);
+                                                  AlphaHintPolicy alpha_hint_policy,
+                                                  const std::array<float, 3>& key_color,
+                                                  float key_tolerance, float key_softness) {
+    return resolve_alpha_hint_source_impl(rgb_view, hint_view, hint_from_clip, alpha_hint_policy,
+                                          key_color, key_tolerance, key_softness);
 }
 
 // NOLINTBEGIN(readability-function-cognitive-complexity,readability-function-size,readability-implicit-bool-conversion,cppcoreguidelines-avoid-magic-numbers,readability-identifier-length,modernize-use-starts-ends-with,modernize-use-designated-initializers,modernize-use-ranges,readability-math-missing-parentheses,bugprone-unchecked-string-to-number-conversion,cppcoreguidelines-pro-type-cstyle-cast,modernize-use-using,modernize-use-integer-sign-comparison,cert-dcl50-cpp,cppcoreguidelines-pro-type-const-cast,readability-identifier-naming,modernize-raw-string-literal,readability-container-size-empty,bugprone-command-processor,readability-use-std-min-max,cppcoreguidelines-avoid-non-const-global-variables,bugprone-misplaced-widening-cast,readability-misleading-indentation,cert-env33-c,performance-unnecessary-copy-initialization,readability-named-parameter,readability-isolate-declaration,cert-err34-c,modernize-avoid-variadic-functions,cppcoreguidelines-pro-bounds-constant-array-index)
@@ -746,6 +751,9 @@ OfxStatus render(OfxImageEffectHandle instance, OfxPropertySetHandle in_args,
     int coarse_resolution_override = kCoarseResolutionAutomatic;
     int input_color_space = kDefaultInputColorSpace;
     int screen_color = kDefaultScreenColor;
+    std::array<double, 3> key_color = {0.0, 1.0, 0.0};
+    double key_tolerance = 0.08;
+    double key_softness = 0.12;
     double temporal_smoothing = kDefaultTemporalSmoothing;
     int despeckle_enabled = 0;
     int despeckle_size = 400;
@@ -784,6 +792,16 @@ OfxStatus render(OfxImageEffectHandle instance, OfxPropertySetHandle in_args,
     }
     if (data->screen_color_param) {
         g_suites.parameter->paramGetValueAtTime(data->screen_color_param, time, &screen_color);
+    }
+    if (data->key_color_param) {
+        g_suites.parameter->paramGetValueAtTime(data->key_color_param, time, &key_color[0],
+                                                &key_color[1], &key_color[2]);
+    }
+    if (data->key_tolerance_param) {
+        g_suites.parameter->paramGetValueAtTime(data->key_tolerance_param, time, &key_tolerance);
+    }
+    if (data->key_softness_param) {
+        g_suites.parameter->paramGetValueAtTime(data->key_softness_param, time, &key_softness);
     }
     // Spec 0002 FR-8 / task 0009: translate the raw OFX choice index into a
     // semantic ScreenColorMode based on the descriptor's identity. The
@@ -911,6 +929,27 @@ OfxStatus render(OfxImageEffectHandle instance, OfxPropertySetHandle in_args,
     }
     canonicalize_to_green_domain(rgb_view, screen_color_transform);
 
+    std::array<float, 3> canonical_key_color = {
+        static_cast<float>(key_color[0]),
+        static_cast<float>(key_color[1]),
+        static_cast<float>(key_color[2]),
+    };
+    if (!screen_color_transform.is_identity) {
+        const auto& matrix = screen_color_transform.forward_matrix;
+        const auto original_key_color = canonical_key_color;
+        canonical_key_color = {
+            safe_channel((matrix[0] * original_key_color[0]) +
+                         (matrix[1] * original_key_color[1]) +
+                         (matrix[2] * original_key_color[2])),
+            safe_channel((matrix[3] * original_key_color[0]) +
+                         (matrix[4] * original_key_color[1]) +
+                         (matrix[5] * original_key_color[2])),
+            safe_channel((matrix[6] * original_key_color[0]) +
+                         (matrix[7] * original_key_color[1]) +
+                         (matrix[8] * original_key_color[2])),
+        };
+    }
+
     if (data->output_mode_param) {
         g_suites.parameter->paramGetValueAtTime(data->output_mode_param, time, &output_mode);
     }
@@ -1000,8 +1039,9 @@ OfxStatus render(OfxImageEffectHandle instance, OfxPropertySetHandle in_args,
     }
 
     const AlphaHintPolicy alpha_hint_policy = AlphaHintPolicy::AutoRoughFallback;
-    auto guide_source =
-        resolve_alpha_hint_source(rgb_view, hint_view, hint_from_clip, alpha_hint_policy);
+    auto guide_source = resolve_alpha_hint_source(
+        rgb_view, hint_view, hint_from_clip, alpha_hint_policy, canonical_key_color,
+        static_cast<float>(key_tolerance), static_cast<float>(key_softness));
     if (!guide_source) {
         const std::string message = guide_source.error().message;
         log_message("render", message);
