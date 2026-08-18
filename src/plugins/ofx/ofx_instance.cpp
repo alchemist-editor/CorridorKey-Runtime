@@ -1296,6 +1296,11 @@ OfxStatus create_instance(OfxImageEffectHandle instance, const char* plugin_iden
                                        &data->input_color_space_param, nullptr);
     g_suites.parameter->paramGetHandle(param_set, kParamScreenColor, &data->screen_color_param,
                                        nullptr);
+    g_suites.parameter->paramGetHandle(param_set, kParamKeyColor, &data->key_color_param, nullptr);
+    g_suites.parameter->paramGetHandle(param_set, kParamKeyTolerance, &data->key_tolerance_param,
+                                       nullptr);
+    g_suites.parameter->paramGetHandle(param_set, kParamKeySoftness, &data->key_softness_param,
+                                       nullptr);
     g_suites.parameter->paramGetHandle(param_set, kParamTemporalSmoothing,
                                        &data->temporal_smoothing_param, nullptr);
     g_suites.parameter->paramGetHandle(param_set, kParamDespillStrength, &data->despill_param,

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <corridorkey/types.hpp>
 #include <corridorkey/version.hpp>
 #include <cstdint>
@@ -61,6 +62,9 @@ constexpr const char* kParamRefinementMode = "refinement_mode";
 constexpr const char* kParamCoarseResolutionOverride = "coarse_resolution_override";
 constexpr const char* kParamInputColorSpace = "input_color_space";
 constexpr const char* kParamScreenColor = "screen_color";
+constexpr const char* kParamKeyColor = "key_color";
+constexpr const char* kParamKeyTolerance = "key_tolerance";
+constexpr const char* kParamKeySoftness = "key_softness";
 constexpr const char* kParamTemporalSmoothing = "temporal_smoothing";
 constexpr const char* kParamDespillStrength = "despill_strength";
 constexpr const char* kParamSpillMethod = "spill_method";
@@ -171,6 +175,9 @@ struct InstanceData {
     OfxParamHandle coarse_resolution_override_param = nullptr;
     OfxParamHandle input_color_space_param = nullptr;
     OfxParamHandle screen_color_param = nullptr;
+    OfxParamHandle key_color_param = nullptr;
+    OfxParamHandle key_tolerance_param = nullptr;
+    OfxParamHandle key_softness_param = nullptr;
     OfxParamHandle temporal_smoothing_param = nullptr;
     OfxParamHandle despill_param = nullptr;
     OfxParamHandle spill_method_param = nullptr;
@@ -431,7 +438,11 @@ RuntimeNodeSummary compose_runtime_node_summary(const InstanceData& data);
 void record_frame_timing(InstanceData* data, double elapsed_ms, LastRenderWorkOrigin work_origin);
 Result<GuideSourceKind> resolve_alpha_hint_source(Image rgb_view, Image hint_view,
                                                   bool hint_from_clip,
-                                                  AlphaHintPolicy alpha_hint_policy);
+                                                  AlphaHintPolicy alpha_hint_policy,
+                                                  const std::array<float, 3>& key_color = {
+                                                      0.0F, 1.0F, 0.0F},
+                                                  float key_tolerance = 0.08F,
+                                                  float key_softness = 0.12F);
 void update_runtime_panel(InstanceData* data);
 void flush_runtime_panel(InstanceData* data);
 // Lazy-initializes the out-of-process runtime client on the first render. Must
